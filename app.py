@@ -58,21 +58,21 @@ def load_customer(q):
 def pdf_from_submissions(df: pd.DataFrame) -> io.BytesIO:
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+    pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "Singpass KYC Renewals", ln=True, align="C")
     pdf.ln(5)
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("Helvetica", size=12)
     pdf.cell(0, 8, f"Total Submissions: {len(df)}", ln=True)
     pdf.ln(5)
 
     cols = ["NRIC", "Customer Name", "Nationality", "Submitted On"]
     widths = [40, 60, 50, 40]
-    pdf.set_font("Arial", "B", 10)
+    pdf.set_font("Helvetica", "B", 10)
     for w, col in zip(widths, cols):
         pdf.cell(w, 8, col, border=1)
     pdf.ln(8)
 
-    pdf.set_font("Arial", size=10)
+    pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
         pdf.cell(widths[0], 6, row["NRIC"], border=1)
         pdf.cell(widths[1], 6, row["Customer Name"], border=1)
@@ -80,16 +80,17 @@ def pdf_from_submissions(df: pd.DataFrame) -> io.BytesIO:
         pdf.cell(widths[3], 6, row["Submitted On (UTC)"].strftime("%Y-%m-%d"), border=1)
         pdf.ln(6)
 
-    pdf_bytes = pdf.output(dest="S").encode("latin-1")
+    raw = pdf.output(dest="S")
+    pdf_bytes = bytes(raw) if isinstance(raw, (bytes, bytearray)) else raw.encode("latin-1")
     return io.BytesIO(pdf_bytes)
 
 def pdf_from_customer(cust: pd.Series) -> io.BytesIO:
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+    pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "Customer Details", ln=True, align="C")
     pdf.ln(5)
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("Helvetica", size=12)
 
     fields = [
       ("Principal Name", cust["principal_name"]),
@@ -107,20 +108,21 @@ def pdf_from_customer(cust: pd.Series) -> io.BytesIO:
       ("Employer Name",   cust["employer_name"])
     ]
     for label, val in fields:
-        pdf.set_font("Arial", "B", 10)
+        pdf.set_font("Helvetica", "B", 10)
         pdf.cell(50, 6, f"{label}:", ln=0)
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("Helvetica", size=10)
         pdf.multi_cell(0, 6, str(val))
 
     pdf.ln(3)
-    pdf.set_font("Arial", "B", 12)
+    pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 6, "Notice of Assessment (Last 2 Years):", ln=True)
-    pdf.set_font("Arial", size=10)
+    pdf.set_font("Helvetica", size=10)
     for e in cust["notice_of_assessment"]:
         line = f"{e['year']} {e['type']}: Income {e['assessable_income']}"
         pdf.multi_cell(0, 6, line)
 
-    pdf_bytes = pdf.output(dest="S").encode("latin-1")
+    raw = pdf.output(dest="S")
+    pdf_bytes = bytes(raw) if isinstance(raw, (bytes, bytearray)) else raw.encode("latin-1")
     return io.BytesIO(pdf_bytes)
 
 # ——— PAGE CONFIG & CSS ———
@@ -181,7 +183,6 @@ h3, h2 {font-size:20px !important; margin-top:24px !important;}
 tabs = st.tabs(["📊 Dashboard", "👤 Customer Details"])
 
 with tabs[0]:
-    # Header + banner
     st.markdown("""
       <div class="header">
         <img src="https://raw.githubusercontent.com/your-org/singpass-logo.png" alt="logo"/>
@@ -193,11 +194,9 @@ with tabs[0]:
       </div>
     """, unsafe_allow_html=True)
 
-    # Date picker & data
     start, end = st.date_input("Date range", [datetime(2025,1,1), datetime(2025,4,22)])
     df = load_submissions(start, end)
 
-    # Metric
     st.markdown(f"""
       <div class="metric">
         <div class="label">Total Submissions</div>
@@ -205,7 +204,6 @@ with tabs[0]:
       </div>
     """, unsafe_allow_html=True)
 
-    # Download PDF (at top)
     df_disp = (
       df.rename(columns={
         "nric_fin":"NRIC","principal_name":"Customer Name",
@@ -217,10 +215,8 @@ with tabs[0]:
     pdf_buf = pdf_from_submissions(df_disp)
     st.download_button("⬇️ Download PDF", data=pdf_buf, file_name="submissions.pdf", mime="application/pdf")
 
-    # Table
     st.markdown(df_disp.to_html(classes="styled-table", index=False, border=0), unsafe_allow_html=True)
 
-    # Chart
     daily = df.assign(day=df["created_at"].dt.date).groupby("day").size().reset_index(name="Submissions")
     base = alt.Chart(daily).encode(x=alt.X("day:T", title="Submitted Date"), y=alt.Y("Submissions:Q", title=""))
     chart = (
@@ -229,11 +225,9 @@ with tabs[0]:
     ).properties(height=300).configure_axis(labelColor="black", titleColor="black")
     st.altair_chart(chart, use_container_width=True)
 
-    # Footer
     st.markdown(f'<div class="footer">Data Last Updated: {datetime.now():%m/%d/%Y %I:%M %p} | <a href="#">Privacy Policy</a></div>', unsafe_allow_html=True)
 
 with tabs[1]:
-    # Header + banner
     st.markdown("""
       <div class="header">
         <img src="https://raw.githubusercontent.com/your-org/validus-logo.png" alt="logo"/>
@@ -246,18 +240,15 @@ with tabs[1]:
       </div>
     """, unsafe_allow_html=True)
 
-    # Search box
     q = st.text_input("Search for Customer (NRIC or Name)")
     st.markdown('<p style="font-size:12px; color:#888; margin-top:-12px;">You may search by NRIC / name</p>', unsafe_allow_html=True)
 
-    # Download PDF (top)
     if q:
         cust = load_customer(q)
         if not cust.empty:
             pdf_c = pdf_from_customer(cust)
             st.download_button("⬇️ Download PDF", data=pdf_c, file_name="customer_details.pdf", mime="application/pdf")
 
-    # Customer detail card
     if q:
         cust = load_customer(q)
         if cust.empty:
@@ -265,7 +256,6 @@ with tabs[1]:
         else:
             st.markdown('<div style="background:#E0E0E0; padding:20px; border-radius:8px;">', unsafe_allow_html=True)
             def md(l,v): return f"<strong>{l}</strong><br>{v or '—'}"
-            # Top rows
             c1, c2 = st.columns(2)
             c1.markdown(md("Principal Name", cust.principal_name), unsafe_allow_html=True)
             c2.markdown(md("Alias Name",    cust.alias_name),      unsafe_allow_html=True)
@@ -275,10 +265,9 @@ with tabs[1]:
               (st.columns(3), ["pass_type","pass_status","pass_expiry_date"])
             ]:
                 for col, k in zip(cols, keys):
-                    label = k.replace("_"," ").title()
-                    col.markdown(md(label, cust[k]), unsafe_allow_html=True)
+                    col.markdown(md(k.replace("_"," ").title(), cust[k]), unsafe_allow_html=True)
             st.markdown(md("Occupation", cust.occupation), unsafe_allow_html=True)
-            st.markdown(md("Employment Sector", cust.employment_sector), unsafe_allow_html=True)
+            st.markdown(md("Employment Sector", cust.employment_sector),unsafe_allow_html=True)
             st.markdown(md("Name of Employer", cust.employer_name),     unsafe_allow_html=True)
 
             st.markdown("<h3>Notice of Assessment (Last 2 Years)</h3>", unsafe_allow_html=True)
@@ -297,14 +286,13 @@ with tabs[1]:
                 """, unsafe_allow_html=True)
             st.markdown("<h3>Contact Details</h3>", unsafe_allow_html=True)
             cc1, cc2 = st.columns(2)
-            cc1.markdown(md("Mobile (Singpass)",       cust.mobile_number),        unsafe_allow_html=True)
-            cc2.markdown(md("Mobile (New)",            cust.revised_mobile_number),unsafe_allow_html=True)
-            cc1.markdown(md("Email (Singpass)",        cust.email_address),        unsafe_allow_html=True)
-            cc2.markdown(md("Email (New)",             cust.revised_email_address),unsafe_allow_html=True)
+            cc1.markdown(md("Mobile (Singpass)", cust.mobile_number), unsafe_allow_html=True)
+            cc2.markdown(md("Mobile (New)",      cust.revised_mobile_number), unsafe_allow_html=True)
+            cc1.markdown(md("Email (Singpass)",  cust.email_address), unsafe_allow_html=True)
+            cc2.markdown(md("Email (New)",       cust.revised_email_address), unsafe_allow_html=True)
             st.markdown(md("Registered Address (Singpass)", cust.registered_address), unsafe_allow_html=True)
             st.markdown(md("Registered Address (New)",      cust.revised_registered_address), unsafe_allow_html=True)
             st.markdown(md("Residential Address",           cust.residential_address), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Footer
             st.markdown(f'<div class="footer">Data Last Updated: {datetime.now():%m/%d/%Y %I:%M %p} | <a href="#">Privacy Policy</a></div>', unsafe_allow_html=True)
