@@ -1,4 +1,5 @@
 # app.py
+
 import streamlit as st
 import pandas as pd
 import json
@@ -10,7 +11,6 @@ import io
 # ——— MOCK DATA (non‑PII) ———
 USE_MOCK = True
 
-#Mock Data
 MOCK_SUBMISSIONS_JSON = """
 [
   { "id":"11111111-1111-1111-1111-111111111111","nric_fin":"S2342433Z","principal_name":"John Doe","nationality":"SINGAPORE CITIZEN","created_at":"2025-04-21T08:21:39Z" },
@@ -18,6 +18,7 @@ MOCK_SUBMISSIONS_JSON = """
   { "id":"33333333-3333-3333-3333-333333333333","nric_fin":"S9876543B","principal_name":"Yan Hu","nationality":"SINGAPORE CITIZEN","created_at":"2025-04-21T04:27:24Z" }
 ]
 """
+
 MOCK_CUSTOMER_JSON = """
 {
   "id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","session_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -47,8 +48,8 @@ def load_submissions(start_date, end_date):
     df = pd.DataFrame(data)
     df["created_at"] = pd.to_datetime(df["created_at"])
     mask = (
-        (df["created_at"].dt.date >= start_date)
-        & (df["created_at"].dt.date <= end_date)
+        (df["created_at"].dt.date >= start_date) &
+        (df["created_at"].dt.date <= end_date)
     )
     return df.loc[mask].reset_index(drop=True)
 
@@ -94,7 +95,7 @@ def pdf_from_customer(cust: pd.Series) -> io.BytesIO:
     pdf.ln(5)
     pdf.set_font("Helvetica", size=12)
 
-    # Render basic fields with safe text-chunking
+    # Render basic fields with safe chunking
     fields = [
       ("Principal Name", cust.get("principal_name","-")),
       ("Alias Name",      cust.get("alias_name","-")),
@@ -115,12 +116,12 @@ def pdf_from_customer(cust: pd.Series) -> io.BytesIO:
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(50,6,f"{label}:",ln=0)
         pdf.set_font("Helvetica", size=10)
-        try:
-            pdf.multi_cell(0,6,text)
-        except FPDFException:
-            # chunk long text
-            for i in range(0,len(text),100):
-                pdf.multi_cell(0,6,text[i:i+100])
+        for i in range(0, len(text), 50):
+            chunk = text[i:i+50]
+            try:
+                pdf.multi_cell(0,6,chunk)
+            except FPDFException:
+                pdf.cell(0,6,chunk, ln=1)
 
     # Notice of Assessment
     pdf.ln(3)
@@ -129,10 +130,12 @@ def pdf_from_customer(cust: pd.Series) -> io.BytesIO:
     pdf.set_font("Helvetica",size=10)
     for e in cust.get("notice_of_assessment",[]):
         line = f"{e.get('year','-')} {e.get('type','-')}: Income {e.get('assessable_income','-')}"
-        try:
-            pdf.multi_cell(0,6,line)
-        except FPDFException:
-            pdf.multi_cell(0,6,line[:100])
+        for i in range(0, len(line), 50):
+            chunk = line[i:i+50]
+            try:
+                pdf.multi_cell(0,6,chunk)
+            except FPDFException:
+                pdf.cell(0,6,chunk, ln=1)
 
     raw = pdf.output(dest="S")
     pdf_bytes = bytes(raw) if isinstance(raw,(bytes,bytearray)) else raw.encode("latin-1")
@@ -188,6 +191,7 @@ h3, h2 {font-size:20px !important; margin-top:24px !important;}
 tabs = st.tabs(["📊 Dashboard", "👤 Customer Details"])
 
 with tabs[0]:
+    # Header + banner
     st.markdown("""
       <div class="header">
         <img src="https://raw.githubusercontent.com/your-org/singpass-logo.png" alt="logo"/>
@@ -199,9 +203,9 @@ with tabs[0]:
       </div>
     """, unsafe_allow_html=True)
 
+    # Date range picker & metric
     start, end = st.date_input("Date range", [datetime(2025,1,1), datetime(2025,4,22)])
     df = load_submissions(start, end)
-
     st.markdown(f"""
       <div class="metric">
         <div class="label">Total Submissions</div>
@@ -209,6 +213,7 @@ with tabs[0]:
       </div>
     """, unsafe_allow_html=True)
 
+    # PDF download at top
     df_disp = (
       df.rename(columns={
         "nric_fin":"NRIC","principal_name":"Customer Name",
@@ -220,8 +225,10 @@ with tabs[0]:
     pdf_buf = pdf_from_submissions(df_disp)
     st.download_button("⬇️ Download PDF", data=pdf_buf, file_name="submissions.pdf", mime="application/pdf")
 
+    # Table
     st.markdown(df_disp.to_html(classes="styled-table", index=False, border=0), unsafe_allow_html=True)
 
+    # Bar chart
     daily = df.assign(day=df["created_at"].dt.date).groupby("day").size().reset_index(name="Submissions")
     chart = (
       alt.Chart(daily).mark_bar(color="#5470C6").encode(x="day:T", y="Submissions:Q")
@@ -229,9 +236,11 @@ with tabs[0]:
     ).properties(height=300).configure_axis(labelColor="black", titleColor="black")
     st.altair_chart(chart, use_container_width=True)
 
+    # Footer
     st.markdown(f'<div class="footer">Data Last Updated: {datetime.now():%m/%d/%Y %I:%M %p} | <a href="#">Privacy Policy</a></div>', unsafe_allow_html=True)
 
 with tabs[1]:
+    # Header + banner
     st.markdown("""
       <div class="header">
         <img src="https://raw.githubusercontent.com/your-org/validus-logo.png" alt="logo"/>
@@ -244,6 +253,7 @@ with tabs[1]:
       </div>
     """, unsafe_allow_html=True)
 
+    # Search box
     q = st.text_input("Search for Customer (NRIC or Name)")
     st.markdown('<p style="font-size:12px; color:#888; margin-top:-12px;">You may search by NRIC / name</p>', unsafe_allow_html=True)
 
@@ -259,7 +269,8 @@ with tabs[1]:
             st.warning("No customer found.")
         else:
             st.markdown('<div style="background:#E0E0E0; padding:20px; border-radius:8px;">', unsafe_allow_html=True)
-            def md(l,v): return f"<strong>{l}</strong><br>{v or '—'}"
+            def md(l, v): return f"<strong>{l}</strong><br>{v or '—'}"
+            # Basic info rows
             c1, c2 = st.columns(2)
             c1.markdown(md("Principal Name", cust.principal_name), unsafe_allow_html=True)
             c2.markdown(md("Alias Name",    cust.alias_name),      unsafe_allow_html=True)
@@ -274,6 +285,7 @@ with tabs[1]:
             st.markdown(md("Employment Sector", cust.employment_sector), unsafe_allow_html=True)
             st.markdown(md("Name of Employer", cust.employer_name), unsafe_allow_html=True)
 
+            # Notice of Assessment
             st.markdown("<h3>Notice of Assessment (Last 2 Years)</h3>", unsafe_allow_html=True)
             for ea in cust.notice_of_assessment:
                 st.markdown(f"""
@@ -288,14 +300,18 @@ with tabs[1]:
                     </ul>
                   </div>
                 """, unsafe_allow_html=True)
+
+            # Contact & addresses
             st.markdown("<h3>Contact Details</h3>", unsafe_allow_html=True)
             cc1, cc2 = st.columns(2)
-            cc1.markdown(md("Mobile (Singpass)", cust.mobile_number), unsafe_allow_html=True)
-            cc2.markdown(md("Mobile (New)",      cust.revised_mobile_number), unsafe_allow_html=True)
-            cc1.markdown(md("Email (Singpass)",  cust.email_address), unsafe_allow_html=True)
-            cc2.markdown(md("Email (New)",       cust.revised_email_address), unsafe_allow_html=True)
+            cc1.markdown(md("Mobile (Singpass)",       cust.mobile_number), unsafe_allow_html=True)
+            cc2.markdown(md("Mobile (New)",            cust.revised_mobile_number), unsafe_allow_html=True)
+            cc1.markdown(md("Email (Singpass)",        cust.email_address), unsafe_allow_html=True)
+            cc2.markdown(md("Email (New)",             cust.revised_email_address), unsafe_allow_html=True)
             st.markdown(md("Registered Address (Singpass)", cust.registered_address), unsafe_allow_html=True)
             st.markdown(md("Registered Address (New)",      cust.revised_registered_address), unsafe_allow_html=True)
             st.markdown(md("Residential Address",           cust.residential_address), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # Footer
             st.markdown(f'<div class="footer">Data Last Updated: {datetime.now():%m/%d/%Y %I:%M %p} | <a href="#">Privacy Policy</a></div>', unsafe_allow_html=True)
