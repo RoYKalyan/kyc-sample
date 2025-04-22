@@ -4,7 +4,7 @@ import pandas as pd
 import json
 import altair as alt
 from datetime import datetime
-from fpdf import FPDF
+from fpdf import FPDF, FPDFException
 import io
 
 # ——— MOCK DATA (non‑PII) ———
@@ -92,37 +92,48 @@ def pdf_from_customer(cust: pd.Series) -> io.BytesIO:
     pdf.ln(5)
     pdf.set_font("Helvetica", size=12)
 
+    # Render basic fields with safe text-chunking
     fields = [
-      ("Principal Name", cust["principal_name"]),
-      ("Alias Name",      cust["alias_name"]),
-      ("NRIC/FIN",        cust["nric_fin"]),
-      ("Sex",             cust["sex"]),
-      ("Date of Birth",   cust["dob"]),
-      ("Nationality",     cust["nationality"]),
-      ("Residential Status", cust["residential_status"]),
-      ("Pass Type",       cust["pass_type"]),
-      ("Pass Status",     cust["pass_status"]),
-      ("Pass Expiry Date",cust["pass_expiry_date"]),
-      ("Occupation",      cust["occupation"]),
-      ("Employment Sector",cust["employment_sector"]),
-      ("Employer Name",   cust["employer_name"])
+      ("Principal Name", cust.get("principal_name","-")),
+      ("Alias Name",      cust.get("alias_name","-")),
+      ("NRIC/FIN",        cust.get("nric_fin","-")),
+      ("Sex",             cust.get("sex","-")),
+      ("Date of Birth",   cust.get("dob","-")),
+      ("Nationality",     cust.get("nationality","-")),
+      ("Residential Status", cust.get("residential_status","-")),
+      ("Pass Type",       cust.get("pass_type","-")),
+      ("Pass Status",     cust.get("pass_status","-")),
+      ("Pass Expiry Date",cust.get("pass_expiry_date","-")),
+      ("Occupation",      cust.get("occupation","-")),
+      ("Employment Sector",cust.get("employment_sector","-")),
+      ("Employer Name",   cust.get("employer_name","-"))
     ]
     for label, val in fields:
+        text = str(val).replace("\n"," ")
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(50, 6, f"{label}:", ln=0)
+        pdf.cell(50,6,f"{label}:",ln=0)
         pdf.set_font("Helvetica", size=10)
-        pdf.multi_cell(0, 6, str(val))
+        try:
+            pdf.multi_cell(0,6,text)
+        except FPDFException:
+            # chunk long text
+            for i in range(0,len(text),100):
+                pdf.multi_cell(0,6,text[i:i+100])
 
+    # Notice of Assessment
     pdf.ln(3)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 6, "Notice of Assessment (Last 2 Years):", ln=True)
-    pdf.set_font("Helvetica", size=10)
-    for e in cust["notice_of_assessment"]:
-        line = f"{e['year']} {e['type']}: Income {e['assessable_income']}"
-        pdf.multi_cell(0, 6, line)
+    pdf.set_font("Helvetica","B",12)
+    pdf.cell(0,6,"Notice of Assessment (Last 2 Years):",ln=True)
+    pdf.set_font("Helvetica",size=10)
+    for e in cust.get("notice_of_assessment",[]):
+        line = f"{e.get('year','-')} {e.get('type','-')}: Income {e.get('assessable_income','-')}"
+        try:
+            pdf.multi_cell(0,6,line)
+        except FPDFException:
+            pdf.multi_cell(0,6,line[:100])
 
     raw = pdf.output(dest="S")
-    pdf_bytes = bytes(raw) if isinstance(raw, (bytes, bytearray)) else raw.encode("latin-1")
+    pdf_bytes = bytes(raw) if isinstance(raw,(bytes,bytearray)) else raw.encode("latin-1")
     return io.BytesIO(pdf_bytes)
 
 # ——— PAGE CONFIG & CSS ———
@@ -141,18 +152,12 @@ body, .stApp, .main {font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 
 .banner .left {font-weight:400;} .banner .right {font-size:12px; opacity:0.9;}
 
 /* Tabs */
-[role="tablist"] > [role="tab"] {
-  font-size:18px !important; color:#666 !important; padding:8px 16px !important;
-}
-[role="tablist"] > [role="tab"][aria-selected="true"] {
-  color:#C8191D !important; border-bottom:3px solid #C8191D !important;
-}
+[role="tablist"] > [role="tab"] { font-size:18px !important; color:#666 !important; padding:8px 16px !important; }
+[role="tablist"] > [role="tab"][aria-selected="true"] { color:#C8191D !important; border-bottom:3px solid #C8191D !important; }
 
 /* Inputs */
 .stDateInput>label, .stTextInput>label {font-size:14px; color:#333; margin-bottom:4px;}
-.stDateInput>div, .stTextInput>div>div>input {
-  background:#FFF !important; color:#000 !important; border:1px solid #CCC !important; border-radius:4px; padding:4px 8px;
-}
+.stDateInput>div, .stTextInput>div>div>input { background:#FFF !important; color:#000 !important; border:1px solid #CCC !important; border-radius:4px; padding:4px 8px; }
 
 /* Metric */
 .metric {text-align:center; padding:24px;}
@@ -167,9 +172,7 @@ body, .stApp, .main {font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 
 .styled-table tr:nth-child(odd) td {background:#FFF;}
 
 /* Download Button */
-.stDownloadButton>button {
-  background-color:#C8191D !important; color:#FFF !important;
-}
+.stDownloadButton>button { background-color:#C8191D !important; color:#FFF !important; }
 
 /* Section headers */
 h3, h2 {font-size:20px !important; margin-top:24px !important;}
@@ -218,10 +221,9 @@ with tabs[0]:
     st.markdown(df_disp.to_html(classes="styled-table", index=False, border=0), unsafe_allow_html=True)
 
     daily = df.assign(day=df["created_at"].dt.date).groupby("day").size().reset_index(name="Submissions")
-    base = alt.Chart(daily).encode(x=alt.X("day:T", title="Submitted Date"), y=alt.Y("Submissions:Q", title=""))
     chart = (
-      base.mark_bar(color="#5470C6") +
-      base.mark_text(dy=-10, color="#000").encode(text="Submissions:Q")
+      alt.Chart(daily).mark_bar(color="#5470C6").encode(x="day:T", y="Submissions:Q")
+      + alt.Chart(daily).mark_text(dy=-10, color="#000").encode(x="day:T", text="Submissions:Q")
     ).properties(height=300).configure_axis(labelColor="black", titleColor="black")
     st.altair_chart(chart, use_container_width=True)
 
@@ -267,8 +269,8 @@ with tabs[1]:
                 for col, k in zip(cols, keys):
                     col.markdown(md(k.replace("_"," ").title(), cust[k]), unsafe_allow_html=True)
             st.markdown(md("Occupation", cust.occupation), unsafe_allow_html=True)
-            st.markdown(md("Employment Sector", cust.employment_sector),unsafe_allow_html=True)
-            st.markdown(md("Name of Employer", cust.employer_name),     unsafe_allow_html=True)
+            st.markdown(md("Employment Sector", cust.employment_sector), unsafe_allow_html=True)
+            st.markdown(md("Name of Employer", cust.employer_name), unsafe_allow_html=True)
 
             st.markdown("<h3>Notice of Assessment (Last 2 Years)</h3>", unsafe_allow_html=True)
             for ea in cust.notice_of_assessment:
@@ -294,5 +296,4 @@ with tabs[1]:
             st.markdown(md("Registered Address (New)",      cust.revised_registered_address), unsafe_allow_html=True)
             st.markdown(md("Residential Address",           cust.residential_address), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-
             st.markdown(f'<div class="footer">Data Last Updated: {datetime.now():%m/%d/%Y %I:%M %p} | <a href="#">Privacy Policy</a></div>', unsafe_allow_html=True)
