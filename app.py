@@ -62,7 +62,7 @@ def pdf_from_submissions(df: pd.DataFrame) -> io.BytesIO:
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "Singpass KYC Renewals", ln=True, align="C")
+    pdf.cell(0, 10, " KYC ", ln=True, align="C")
     pdf.ln(5)
     pdf.set_font("Helvetica", size=12)
     pdf.cell(0, 8, f"Total Submissions: {len(df)}", ln=True)
@@ -244,7 +244,7 @@ with tabs[1]:
     st.markdown("""
       <div class="header">
         <img src="https://raw.githubusercontent.com/your-org/validus-logo.png" alt="logo"/>
-        <h1>Validus Capital Pte Ltd</h1>
+        <h1>Company Name</h1>
         <span style="margin-left:auto; background:#C8191D; color:#FFF; padding:2px 6px; font-size:10px; transform:rotate(15deg); position:relative; right:20px; top:-10px;">BETA</span>
       </div>
       <div class="banner">
