@@ -195,7 +195,7 @@ with tabs[0]:
     st.markdown("""
       <div class="header">
         <img src="https://raw.githubusercontent.com/your-org/singpass-logo.png" alt="logo"/>
-        <h1>Singpass KYC Renewals</h1>
+        <h1> KYC </h1>
       </div>
       <div class="banner">
         <div class="left">Dashboard of customer renewals (Production)</div>
