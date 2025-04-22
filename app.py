@@ -194,7 +194,6 @@ with tabs[0]:
     # Header + banner
     st.markdown("""
       <div class="header">
-        <img src="https://raw.githubusercontent.com/your-org/singpass-logo.png" alt="logo"/>
         <h1> KYC </h1>
       </div>
       <div class="banner">
@@ -243,7 +242,6 @@ with tabs[1]:
     # Header + banner
     st.markdown("""
       <div class="header">
-        <img src="https://raw.githubusercontent.com/your-org/validus-logo.png" alt="logo"/>
         <h1>Company Name</h1>
         <span style="margin-left:auto; background:#C8191D; color:#FFF; padding:2px 6px; font-size:10px; transform:rotate(15deg); position:relative; right:20px; top:-10px;">BETA</span>
       </div>
